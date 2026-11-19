@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "settlelite"
+version = "0.0.1"
+description = "Exact-cent event-envelope validation for a settlement ledger"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.setuptools.packages.find]
+include = ["settlelite*"]

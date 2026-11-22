@@ -209,13 +209,48 @@ class JournalService:
         reservation therefore does not count against available funds.
         """
         validate_request_id(request_id)
+        validate_memo(memo)
+        with self.db.transaction():
+            currency, resolved = self.prepare(lines, released_hold_id=released_hold_id)
+            return self._book(
+                request_id=request_id,
+                currency=currency,
+                resolved=resolved,
+                memo=memo,
+                effective_date=effective_date,
+                kind=kind,
+                reverses_entry_id=reverses_entry_id,
+            )
+
+    def prepare(
+        self, lines: Sequence[PostingInput], *, released_hold_id: int | None = None
+    ) -> tuple[str, list[tuple[Account, Direction, int]]]:
+        """Resolve posting lines against their accounts and check funds.
+
+        Returns the entry currency and the resolved lines; nothing is
+        written.
+        """
+        currency, resolved = self._resolve_lines(lines)
+        self._check_funds(resolved, released_hold_id=released_hold_id)
+        return currency, resolved
+
+    def _book(
+        self,
+        *,
+        request_id: str,
+        currency: str,
+        resolved: list[tuple[Account, Direction, int]],
+        memo: str,
+        effective_date: date | None,
+        kind: EntryKind,
+        reverses_entry_id: int | None,
+    ) -> JournalEntry:
+        validate_request_id(request_id)
         memo = validate_memo(memo)
         with self.db.transaction():
             if self.repo.by_request_id(request_id) is not None:
                 raise ConflictError(f"an entry already exists for request_id {request_id!r}")
-            currency, resolved = self._resolve_lines(lines)
             day = self.resolve_effective_date(effective_date)
-            self._check_funds(resolved, released_hold_id=released_hold_id)
             entry = self.repo.insert(
                 request_id=request_id,
                 kind=kind,
@@ -263,11 +298,18 @@ class JournalService:
         }
         print_ = fingerprint("post", payload)
         with self.db.transaction():
+            currency, resolved = self.prepare(lines)
             prior = self.requests.check(request_id, "post", print_)
             if prior is not None:
                 return PostResult(self.get(int(prior.result_id or 0)), replayed=True)
-            entry = self.record(
-                request_id=request_id, lines=lines, memo=memo, effective_date=effective_date
+            entry = self._book(
+                request_id=request_id,
+                currency=currency,
+                resolved=resolved,
+                memo=memo,
+                effective_date=effective_date,
+                kind=EntryKind.STANDARD,
+                reverses_entry_id=None,
             )
             self.requests.remember(
                 request_id, "post", print_, result_type="entry", result_id=entry.id
@@ -291,10 +333,11 @@ class JournalService:
         request_id = validate_request_id(request_id)
         if not isinstance(entry_id, int) or isinstance(entry_id, bool) or entry_id <= 0:
             raise ValidationError("entry_id must be a positive integer")
+        value_date = self.resolve_effective_date(effective_date)
         payload = {
             "entry_id": entry_id,
             "memo": memo,
-            "effective_date": optional_date_text(effective_date),
+            "effective_date": value_date.isoformat(),
         }
         print_ = fingerprint("reverse", payload)
         with self.db.transaction():
@@ -318,7 +361,7 @@ class JournalService:
                 request_id=request_id,
                 lines=lines,
                 memo=memo if memo is not None else f"Reversal of entry {entry_id}",
-                effective_date=effective_date,
+                effective_date=value_date,
                 kind=EntryKind.REVERSAL,
                 reverses_entry_id=entry_id,
             )

@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 from ..audit import AuditLog
-from ..clock import Clock, format_timestamp, optional_date_text, optional_timestamp_text
+from ..clock import Clock, format_timestamp, optional_timestamp_text
 from ..errors import (
     CurrencyMismatchError,
     HoldStateError,
@@ -18,8 +18,8 @@ from ..errors import (
 from ..ledger.accounts import AccountService
 from ..ledger.balances import BalanceService
 from ..ledger.idempotency import RequestLog, fingerprint, validate_request_id
-from ..ledger.journal import JournalService
-from ..ledger.models import EntryKind, JournalEntry, PostingInput, validate_memo
+from ..ledger.journal import JournalService, NonBusinessDayPolicy
+from ..ledger.models import Account, EntryKind, JournalEntry, PostingInput, validate_memo
 from ..money import require_positive
 from ..storage.database import Database
 from .models import Hold, HoldStatus
@@ -79,9 +79,9 @@ class HoldService:
         clock: Clock,
         audit: AuditLog,
         accounts: AccountService,
-        journal: JournalService,
         balances: BalanceService,
         *,
+        non_business_day: NonBusinessDayPolicy | str = NonBusinessDayPolicy.ALLOW,
         default_expiry: timedelta = DEFAULT_EXPIRY,
         max_expiry: timedelta = MAX_EXPIRY,
     ) -> None:
@@ -93,8 +93,10 @@ class HoldService:
         self.clock = clock
         self.audit = audit
         self.accounts = accounts
-        self.journal = journal
         self.balances = balances
+        self.journal = JournalService(
+            db, clock, audit, balances, non_business_day=non_business_day
+        )
         self.default_expiry = default_expiry
         self.max_expiry = max_expiry
         self.repo = HoldRepository(db)
@@ -147,23 +149,13 @@ class HoldService:
         }
         print_ = fingerprint("hold.place", payload)
         with self.db.transaction():
-            prior = self.requests.check(request_id, "hold.place", print_)
-            if prior is not None:
-                return HoldResult(self.get(int(prior.result_id or 0)), replayed=True)
             holder = self.accounts.require_open(account)
             now = self.clock.now()
             expiry = self._expiry(now, expires_at, expires_in)
-            if not holder.allow_negative:
-                available = self.balances.available(holder)
-                if available < amount:
-                    raise InsufficientFundsError(
-                        f"insufficient available funds in {holder.code}",
-                        details={
-                            "account": holder.code,
-                            "available_minor": available,
-                            "required_minor": amount,
-                        },
-                    )
+            self._require_available(holder, amount)
+            prior = self.requests.check(request_id, "hold.place", print_)
+            if prior is not None:
+                return HoldResult(self.get(int(prior.result_id or 0)), replayed=True)
             hold = self.repo.insert(
                 request_id=request_id,
                 account_id=holder.id,
@@ -188,6 +180,20 @@ class HoldService:
                 request_id, "hold.place", print_, result_type="hold", result_id=hold.id
             )
         return HoldResult(hold, replayed=False)
+
+    def _require_available(self, holder: Account, amount: int) -> None:
+        if holder.allow_negative:
+            return
+        available = self.balances.available(holder)
+        if available < amount:
+            raise InsufficientFundsError(
+                f"insufficient available funds in {holder.code}",
+                details={
+                    "account": holder.code,
+                    "available_minor": available,
+                    "required_minor": amount,
+                },
+            )
 
     def _require_active(self, hold: Hold) -> None:
         state = hold.effective_status(self.clock.now())
@@ -220,12 +226,13 @@ class HoldService:
         if amount is not None:
             amount = require_positive(amount)
         memo = validate_memo(memo)
+        value_date = self.journal.resolve_effective_date(effective_date)
         payload = {
             "hold_id": hold_id,
             "destination": destination,
             "amount_minor": amount,
             "memo": memo,
-            "effective_date": optional_date_text(effective_date),
+            "effective_date": value_date.isoformat(),
         }
         print_ = fingerprint("hold.capture", payload)
         with self.db.transaction():
@@ -258,7 +265,7 @@ class HoldService:
                     PostingInput(target.code, side.opposite, captured),
                 ],
                 memo=memo or f"Capture of hold {hold.id}",
-                effective_date=effective_date,
+                effective_date=value_date,
                 kind=EntryKind.CAPTURE,
                 released_hold_id=hold.id,
             )

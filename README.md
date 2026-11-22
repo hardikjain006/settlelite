@@ -73,6 +73,34 @@ and holiday files), the policy for entries dated on non-business days
 are rejected. See `examples/settlelite.json`; holiday files contain one
 `YYYY-MM-DD name` per line.
 
+## Value dates, reversals and retries
+
+Every journal entry carries a value date (`effective_date`) and a posting
+timestamp (`created_at`). The value date is the `--date` given to the command
+that creates the entry (`post`, `reverse`, `fees charge` or `hold capture`)
+or, when it is omitted, the current UTC date. The non-business-day policy
+and the configured calendar (weekend days, holiday files and inline
+holidays) apply to every entry in the same way, whichever of these commands
+creates it: under `roll_forward` an entry whose value date is a weekend day
+or a holiday is booked on the next business day, and under `reject` the
+request fails with `invalid_input` and records nothing.
+
+Balances `--as-of`, trial balances, statements, `entry list` and exports
+select and order entries by value date. The posting timestamp never moves
+an entry from one period to another.
+
+A reversal is booked on its own value date: the `--date` given to
+`reverse`, or the current date, subject to the same policy. It never takes
+the value date of the entry it reverses. A reversal therefore leaves every
+figure for earlier dates unchanged: `balance --as-of`, `balance --trial
+--as-of`, a statement for an earlier period and an export ending before the
+reversal report exactly what they reported before it was made, and the
+reversal appears in every report on its own value date. To correct an
+earlier period, reverse with an explicit `--date` in that period.
+
+Retrying a request with the same `--request-id` is always safe. See
+CONTRACT.md for how a retry is matched to the original request.
+
 ## Architecture
 
 ```

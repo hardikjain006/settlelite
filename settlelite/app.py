@@ -60,8 +60,8 @@ class SettleLite:
             self.clock,
             self.audit,
             self.accounts,
-            self.journal,
             self.balances,
+            non_business_day=self.config.posting.non_business_day,
             default_expiry=self.config.holds.default_expiry,
             max_expiry=self.config.holds.max_expiry,
         )
@@ -70,7 +70,7 @@ class SettleLite:
             self.clock,
             self.audit,
             self.accounts,
-            self.journal,
+            non_business_day=self.config.posting.non_business_day,
             default_rounding=self.config.rounding,
         )
 

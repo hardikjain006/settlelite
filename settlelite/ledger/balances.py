@@ -136,11 +136,12 @@ class BalanceService:
         params: list[Any] = []
         where = ""
         if as_of is not None:
-            where = " WHERE e.effective_date <= ?"
+            where = " WHERE COALESCE(r.effective_date, e.effective_date) <= ?"
             params.append(as_of.isoformat())
         rows = self.db.query_all(
             "SELECT e.currency, p.direction, SUM(p.amount) AS total FROM postings p "
-            f"JOIN journal_entries e ON e.id = p.entry_id{where} "
+            "JOIN journal_entries e ON e.id = p.entry_id "
+            f"LEFT JOIN journal_entries r ON r.id = e.reverses_entry_id{where} "
             "GROUP BY e.currency, p.direction ORDER BY e.currency",
             params,
         )

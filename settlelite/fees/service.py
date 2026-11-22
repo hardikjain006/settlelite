@@ -8,12 +8,12 @@ from datetime import date
 from typing import Any
 
 from ..audit import AuditLog
-from ..clock import Clock, format_timestamp, optional_date_text
+from ..clock import Clock, format_timestamp
 from ..errors import CurrencyMismatchError, NotFoundError, ValidationError
 from ..jsonutil import canonical_json
 from ..ledger.accounts import AccountService
 from ..ledger.idempotency import RequestLog, fingerprint, validate_request_id
-from ..ledger.journal import JournalService
+from ..ledger.journal import JournalService, NonBusinessDayPolicy
 from ..ledger.models import Direction, EntryKind, JournalEntry, PostingInput, validate_memo
 from ..money import RoundingMode, allocate, parse_cents
 from ..storage.database import Database
@@ -58,15 +58,17 @@ class FeeService:
         clock: Clock,
         audit: AuditLog,
         accounts: AccountService,
-        journal: JournalService,
         *,
+        non_business_day: NonBusinessDayPolicy | str = NonBusinessDayPolicy.ALLOW,
         default_rounding: RoundingMode = RoundingMode.HALF_UP,
     ) -> None:
         self.db = db
         self.clock = clock
         self.audit = audit
         self.accounts = accounts
-        self.journal = journal
+        self.journal = JournalService(
+            db, clock, audit, accounts.balances, non_business_day=non_business_day
+        )
         self.default_rounding = default_rounding
         self.repo = FeeScheduleRepository(db)
         self.charges = FeeChargeRepository(db)
@@ -146,13 +148,14 @@ class FeeService:
         request_id = validate_request_id(request_id)
         parse_cents(amount)
         memo = validate_memo(memo)
+        value_date = self.journal.resolve_effective_date(effective_date)
         payload = {
             "schedule": schedule,
             "payer": payer,
             "amount_minor": amount,
             "revenue": revenue,
             "memo": memo,
-            "effective_date": optional_date_text(effective_date),
+            "effective_date": value_date.isoformat(),
         }
         print_ = fingerprint("fee.charge", payload)
         with self.db.transaction():
@@ -188,7 +191,7 @@ class FeeService:
                     request_id=request_id,
                     lines=lines,
                     memo=memo or f"Fee {current.name} v{current.version}",
-                    effective_date=effective_date,
+                    effective_date=value_date,
                     kind=EntryKind.FEE,
                 )
             charge = self.charges.insert(

@@ -103,10 +103,10 @@ def iter_export_rows(db: Database, selection: ExportFilter | None = None) -> Ite
     clauses: list[str] = []
     params: list[Any] = []
     if selection.start is not None:
-        clauses.append("e.effective_date >= ?")
+        clauses.append("book_date >= ?")
         params.append(selection.start.isoformat())
     if selection.end is not None:
-        clauses.append("e.effective_date <= ?")
+        clauses.append("book_date <= ?")
         params.append(selection.end.isoformat())
     if selection.account is not None:
         clauses.append("a.code = ?")
@@ -118,10 +118,12 @@ def iter_export_rows(db: Database, selection: ExportFilter | None = None) -> Ite
     sql = (
         "SELECT e.id AS entry_id, e.request_id, e.kind, e.effective_date, e.created_at, "
         "p.line_no, a.code AS account, p.direction, p.amount, e.currency, e.memo, "
-        "e.reverses_entry_id FROM postings p "
+        "e.reverses_entry_id, COALESCE(o.effective_date, e.effective_date) AS book_date "
+        "FROM postings p "
         "JOIN journal_entries e ON e.id = p.entry_id "
+        "LEFT JOIN journal_entries o ON o.id = e.reverses_entry_id "
         f"JOIN accounts a ON a.id = p.account_id{where} "
-        "ORDER BY e.effective_date, e.id, p.line_no"
+        "ORDER BY book_date, e.id, p.line_no"
     )
     for row in db.iterate(sql, params):
         yield ExportRow(

@@ -66,5 +66,25 @@ nothing. Reusing an id with different arguments, or for a different
 operation, fails with `idempotency_conflict`. A rejected request records
 nothing, so its id may be retried.
 
+The fingerprint covers the arguments exactly as given, not values the
+ledger derives while running the request. An omitted `--date` is
+fingerprinted as omitted, so a retry on a later day replays the original
+result although the current date has changed; `--expires-in` is
+fingerprinted as a duration, not as the expiry instant it produced.
+Conversely, a retry with a different explicit `--date` is a different
+request and fails with `idempotency_conflict`, even when both dates would be
+booked on the same business day.
+
+The request log is consulted before a request is checked against the
+current state of the ledger. A repeated request therefore replays even when
+balances, holds, hold status, the date or account status have changed since
+it was first processed: for example a payment whose own debit left too
+little available for it to pass the funds check a second time, a hold
+placement whose own reservation did the same, a hold placement retried
+after its `--expires-at` has passed, or a request retried on a day the
+non-business-day policy would reject. Likewise, an id reused with different
+arguments fails with `idempotency_conflict` even when the new arguments
+would also fail the funds check.
+
 `--now TIMESTAMP` replaces the system clock for one invocation. Timestamps in
 output are UTC, formatted `YYYY-MM-DDTHH:MM:SSZ`; dates are `YYYY-MM-DD`.

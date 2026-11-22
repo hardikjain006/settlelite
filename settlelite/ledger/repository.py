@@ -20,6 +20,14 @@ from .models import (
 )
 
 
+# Journal rows joined with the entry they reverse (if any).  Period
+# selection, ordering and as-of totals all go through the book date.
+_DATED_ENTRIES = (
+    "(journal_entries e LEFT JOIN journal_entries r ON r.id = e.reverses_entry_id)"
+)
+_BOOK_DATE = "COALESCE(r.effective_date, e.effective_date)"
+
+
 def _account_from_row(row: sqlite3.Row) -> Account:
     return Account(
         id=row["id"],
@@ -210,14 +218,14 @@ class JournalRepository(Repository):
         kind: EntryKind | None = None,
         limit: int | None = None,
     ) -> list[JournalEntry]:
-        """Entries ordered by effective date, then id."""
+        """Entries ordered by book date, then id."""
         clauses: list[str] = []
         params: list[Any] = []
         if start is not None:
-            clauses.append("e.effective_date >= ?")
+            clauses.append(f"{_BOOK_DATE} >= ?")
             params.append(start.isoformat())
         if end is not None:
-            clauses.append("e.effective_date <= ?")
+            clauses.append(f"{_BOOK_DATE} <= ?")
             params.append(end.isoformat())
         if kind is not None:
             clauses.append("e.kind = ?")
@@ -228,7 +236,7 @@ class JournalRepository(Repository):
             )
             params.append(account_id)
         where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
-        sql = f"SELECT e.* FROM journal_entries e{where} ORDER BY e.effective_date, e.id"
+        sql = f"SELECT e.* FROM {_DATED_ENTRIES}{where} ORDER BY {_BOOK_DATE}, e.id"
         if limit is not None:
             sql += " LIMIT ?"
             params.append(limit)
@@ -245,14 +253,14 @@ class JournalRepository(Repository):
         clauses = ["p.account_id = ?"]
         params: list[Any] = [account_id]
         if as_of is not None:
-            clauses.append("e.effective_date <= ?")
+            clauses.append(f"{_BOOK_DATE} <= ?")
             params.append(as_of.isoformat())
         if before is not None:
-            clauses.append("e.effective_date < ?")
+            clauses.append(f"{_BOOK_DATE} < ?")
             params.append(before.isoformat())
         rows = self._all(
             "SELECT p.direction, SUM(p.amount) AS total FROM postings p "
-            "JOIN journal_entries e ON e.id = p.entry_id "
+            f"JOIN {_DATED_ENTRIES} ON e.id = p.entry_id "
             f"WHERE {' AND '.join(clauses)} GROUP BY p.direction",
             params,
         )
@@ -263,11 +271,11 @@ class JournalRepository(Repository):
         params: list[Any] = []
         where = ""
         if as_of is not None:
-            where = " WHERE e.effective_date <= ?"
+            where = f" WHERE {_BOOK_DATE} <= ?"
             params.append(as_of.isoformat())
         rows = self._all(
             "SELECT p.account_id, p.direction, SUM(p.amount) AS total FROM postings p "
-            f"JOIN journal_entries e ON e.id = p.entry_id{where} "
+            f"JOIN {_DATED_ENTRIES} ON e.id = p.entry_id{where} "
             "GROUP BY p.account_id, p.direction",
             params,
         )

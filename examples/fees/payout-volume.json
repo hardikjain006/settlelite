@@ -1,0 +1,16 @@
+{
+  "name": "payout-volume",
+  "currency": "USD",
+  "components": [
+    {
+      "type": "tiered",
+      "label": "graduated",
+      "tiers": [
+        {"up_to_minor": 100000, "bps": 50},
+        {"up_to_minor": 1000000, "bps": 25},
+        {"up_to_minor": null, "bps": 10}
+      ]
+    }
+  ],
+  "maximum_minor": 5000
+}

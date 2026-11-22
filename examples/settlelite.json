@@ -1,0 +1,11 @@
+{
+  "database": "settlelite.db",
+  "default_currency": "USD",
+  "rounding": "half_even",
+  "calendar": {
+    "weekend": ["sat", "sun"],
+    "holiday_files": ["holidays-us-2026.txt"]
+  },
+  "posting": {"non_business_day": "roll_forward"},
+  "holds": {"default_expiry_hours": 168, "max_expiry_hours": 720}
+}

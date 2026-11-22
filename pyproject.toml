@@ -4,10 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "settlelite"
-version = "0.0.1"
-description = "Exact-cent event-envelope validation for a settlement ledger"
+version = "0.2.0"
+description = "A small double-entry payments ledger and settlement back office"
+readme = "README.md"
+license = {text = "Apache-2.0"}
 requires-python = ">=3.12"
 dependencies = []
+
+[project.scripts]
+settlelite = "settlelite.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["settlelite*"]

@@ -4,15 +4,20 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from .errors import ValidationError
 from .money import parse_cents
 
 
-class EventError(ValueError):
+class EventError(ValidationError):
     """An envelope does not satisfy the public event schema."""
+
+    code = "invalid_event"
 
 
 @dataclass(frozen=True)
 class Event:
+    """A syntactically valid, normalized event envelope."""
+
     version: str
     request_id: str
     item_id: str
@@ -28,6 +33,7 @@ def _text(value: object, name: str) -> str:
 
 
 def decode_event(payload: str | Mapping[str, object]) -> Event:
+    """Validate a JSON object string or mapping; see CONTRACT.md."""
     try:
         data = json.loads(payload) if isinstance(payload, str) else payload
     except (ValueError, TypeError) as exc:
@@ -60,6 +66,7 @@ def decode_event(payload: str | Mapping[str, object]) -> Event:
 
 
 def encode_event(event: Event) -> str:
+    """Return the compact, sorted JSON form of a normalized event."""
     data = {
         "version": event.version,
         "request_id": event.request_id,

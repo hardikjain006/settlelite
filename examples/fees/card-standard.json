@@ -1,0 +1,14 @@
+{
+  "name": "card-standard",
+  "currency": "USD",
+  "rounding": "half_up",
+  "components": [
+    {"type": "flat", "amount_minor": 30, "label": "per-transaction"},
+    {"type": "percentage", "bps": 290, "label": "processing"}
+  ],
+  "minimum_minor": 50,
+  "splits": [
+    {"account": "revenue:fees", "weight": 4},
+    {"account": "revenue:partner", "weight": 1}
+  ]
+}

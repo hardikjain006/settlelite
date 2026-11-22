@@ -98,7 +98,7 @@ class HoldRepository(Repository):
 
     def due_for_expiry(self, now: str) -> list[Hold]:
         rows = self._all(
-            f"{_SELECT} WHERE h.status = 'active' AND h.expires_at <= ? ORDER BY h.id", (now,)
+            f"{_SELECT} WHERE h.status = 'active' AND h.expires_at < ? ORDER BY h.id", (now,)
         )
         return [_hold_from_row(row) for row in rows]
 

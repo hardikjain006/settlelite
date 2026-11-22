@@ -210,7 +210,7 @@ class AuditLog:
                 prev_hash,
                 seq=entry.seq,
                 recorded_at=entry.recorded_at,
-                actor=entry.actor,
+                actor=self.actor,
                 entity_type=entry.entity_type,
                 entity_id=entry.entity_id,
                 action=entry.action,

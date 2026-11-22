@@ -248,7 +248,7 @@ class JournalRepository(Repository):
             clauses.append("e.effective_date <= ?")
             params.append(as_of.isoformat())
         if before is not None:
-            clauses.append("e.effective_date < ?")
+            clauses.append("e.effective_date <= ?")
             params.append(before.isoformat())
         rows = self._all(
             "SELECT p.direction, SUM(p.amount) AS total FROM postings p "

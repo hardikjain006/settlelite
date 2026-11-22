@@ -179,9 +179,9 @@ class BusinessCalendar:
         count = 0
         day = start
         while day < end:
-            day = day + timedelta(days=1)
             if self.is_business_day(day):
                 count += 1
+            day = day + timedelta(days=1)
         return count
 
     def holidays_between(self, start: date, end: date) -> list[tuple[date, str]]:

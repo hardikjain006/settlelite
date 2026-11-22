@@ -7,7 +7,14 @@ from fractions import Fraction
 from typing import Any
 
 from ..errors import AmountError
-from ..money import BASIS_POINTS, format_amount, parse_cents, require_storable, round_fraction
+from ..money import (
+    BASIS_POINTS,
+    RoundingMode,
+    format_amount,
+    parse_cents,
+    require_storable,
+    round_fraction,
+)
 from .models import Component, FeeSchedule, FlatComponent, PercentageComponent, TieredComponent
 
 
@@ -73,7 +80,7 @@ def component_fee(component: Component, amount: int, schedule: FeeSchedule) -> i
             fee = min(fee, component.maximum)
         return fee
     if isinstance(component, TieredComponent):
-        return round_fraction(graduated_fraction(component, amount), schedule.rounding)
+        return round_fraction(graduated_fraction(component, amount), RoundingMode.HALF_EVEN)
     raise TypeError(f"unknown fee component: {component!r}")
 
 

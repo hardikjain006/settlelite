@@ -292,7 +292,6 @@ class JournalService:
         if not isinstance(entry_id, int) or isinstance(entry_id, bool) or entry_id <= 0:
             raise ValidationError("entry_id must be a positive integer")
         payload = {
-            "entry_id": entry_id,
             "memo": memo,
             "effective_date": optional_date_text(effective_date),
         }
